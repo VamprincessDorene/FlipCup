@@ -2,8 +2,11 @@
 # Usage (from this folder):  .\publish.ps1
 # Bump <Version> in FlipCup.csproj first; Dalamud only offers an update when the version goes up.
 
+param([switch]$SkipGit)   # -SkipGit: build, write repo.json and release, but leave committing/pushing to you
+
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { $env:Path += ";C:\Program Files\GitHub CLI" }
 
 # Which GitHub repo this is, from the git remote (e.g. https://github.com/someone/FlipCup.git).
 $remote = git remote get-url origin
@@ -31,9 +34,11 @@ $entry["LastUpdate"] = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $json = ConvertTo-Json @($entry) -Depth 5
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot "repo.json"), $json, (New-Object Text.UTF8Encoding $false))
 
-git add -A
-git commit -m "Release v$version"
-git push origin HEAD
+if (-not $SkipGit) {
+    git add -A
+    git commit -m "Release v$version"
+    git push origin HEAD
+}
 
 gh release create "v$version" $zip --repo "$owner/$repo" --title "Flip Cup v$version" --notes "Flip Cup v$version"
 
