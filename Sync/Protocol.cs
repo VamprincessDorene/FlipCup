@@ -52,6 +52,7 @@ public sealed class StateDto
     public bool EnforceTurnOrder { get; set; }
     public string HostName { get; set; } = "";
     public LayoutDto Layout { get; set; } = new();
+    public string[] Kicked { get; set; } = Array.Empty<string>();   // client ids the host removed
 }
 
 public sealed class RequestDto

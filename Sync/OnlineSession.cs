@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace FlipCup.Sync;
@@ -31,6 +32,13 @@ public sealed class OnlineSession : IDisposable
     private int seq;
     private bool gotFirstSnapshot;
     private string lastLayoutJson = "";
+    private bool leaveRequested;
+
+    // Host: everyone who has joined (client id -> character name), and who's been kicked.
+    private readonly System.Collections.Generic.Dictionary<string, string> players = new();
+    private readonly System.Collections.Generic.HashSet<string> kicked = new();
+
+    public record PlayerInfo(string Id, string Name, int Seat);
 
     public Role Role { get; private set; } = Role.Offline;
     public string Code { get; private set; } = "";
@@ -119,6 +127,33 @@ public sealed class OnlineSession : IDisposable
         Code = "";
         gotFirstSnapshot = false;
         lastLayoutJson = "";
+        leaveRequested = false;
+        lock (players) { players.Clear(); kicked.Clear(); }
+    }
+
+    // ----- host controls ----------------------------------------------------------
+
+    /// <summary>Host: everyone in the game (seated or watching), for the player list.</summary>
+    public System.Collections.Generic.List<PlayerInfo> Players()
+    {
+        lock (players)
+            return players.Select(p => new PlayerInfo(p.Key, p.Value, game.SeatOf(p.Key)))
+                          .OrderBy(p => p.Seat < 0 ? 99 : p.Seat).ToList();
+    }
+
+    /// <summary>
+    /// Host: remove a player. They lose their seat, get disconnected, and the host ignores
+    /// anything else they send for the rest of this game.
+    /// </summary>
+    public void Kick(string clientId)
+    {
+        if (Role != Role.Host || clientId == ClientId) return;
+        lock (game)
+        {
+            lock (players) { kicked.Add(clientId); players.Remove(clientId); }
+            game.Release(clientId);
+            game.Changed = true;
+        }
     }
 
     // ----- player actions (any thread) --------------------------------------------
@@ -181,12 +216,27 @@ public sealed class OnlineSession : IDisposable
         {
             sinceHostHeard += dt;
         }
+
+        // Guest: kicked, or the host ended the game -> go offline (the error stays visible).
+        if (leaveRequested)
+        {
+            leaveRequested = false;
+            var reason = Error;
+            _ = LeaveAsync().ContinueWith(_ => { Error = reason; announce(reason); });
+        }
     }
 
     private void HandleRequest(string payload)
     {
         var r = Protocol.Deserialize<RequestDto>(payload);
-        if (r == null || string.IsNullOrEmpty(r.From)) return;
+        if (r == null || string.IsNullOrEmpty(r.From) || r.From == ClientId) return;
+
+        lock (players)
+        {
+            if (kicked.Contains(r.From)) return;   // removed by the host: ignore everything
+            if (r.Type == "leave") players.Remove(r.From);
+            else players[r.From] = Clean(r.Name);
+        }
 
         switch (r.Type)
         {
@@ -217,18 +267,28 @@ public sealed class OnlineSession : IDisposable
         snap.Seq = ++seq;
         snap.HostName = MyName;
         snap.Layout = GetLayout?.Invoke() ?? new LayoutDto();
+        lock (players) snap.Kicked = kicked.ToArray();
         _ = relay!.PublishAsync(Protocol.StateTopic(Code), Protocol.Serialize(snap), retain: true);
     }
 
     private void HandleState(string payload)
     {
+        if (leaveRequested) return;
         if (string.IsNullOrEmpty(payload))
         {
             Error = "The host ended the game.";
+            leaveRequested = true;
             return;
         }
         var s = Protocol.Deserialize<StateDto>(payload);
         if (s == null) return;
+
+        if (Array.IndexOf(s.Kicked, ClientId) >= 0)
+        {
+            Error = "The host removed you from the game.";
+            leaveRequested = true;
+            return;
+        }
 
         sinceHostHeard = 0;
         HostName = s.HostName;

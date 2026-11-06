@@ -118,9 +118,13 @@ public sealed class Plugin : IDalamudPlugin
                 : $"Joined game {Session.Code}. Open /flipcup and pick a seat.", "Flip Cup"));
     }
 
+    public void Announce(string msg) => ChatGui.Print(msg, "Flip Cup");
+
     public void LeaveOnline()
     {
-        _ = Session.LeaveAsync().ContinueWith(_ => ChatGui.Print("Left the online game.", "Flip Cup"));
+        var wasHost = Session.Role == Role.Host;
+        _ = Session.LeaveAsync().ContinueWith(_ =>
+            ChatGui.Print(wasHost ? "Game ended. Everyone has been disconnected." : "Left the online game.", "Flip Cup"));
         hostLayout = null;
     }
 

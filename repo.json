@@ -3,7 +3,7 @@
         "Author":  "VamprincessDorene",
         "Name":  "Flip Cup",
         "InternalName":  "FlipCup",
-        "AssemblyVersion":  "0.2.0.0",
+        "AssemblyVersion":  "0.2.1.0",
         "Description":  "Turns 8 placed cup furnishings (Tankards work great) into a game of flip cup for two teams of 4. Click to chug, click to flip: 50/50 to land rim-down. First team to flip all 4 cups wins. One player hosts with /flipcup host, friends join with /flipcup join CODE and see every flip in sync. Flips are visual only and never change your house. Type /flipcup to open.",
         "ApplicableVersion":  "any",
         "Tags":  [
@@ -20,9 +20,9 @@
         "Punchline":  "Play flip cup with your friends on any counter in your house.",
         "AcceptsFeedback":  true,
         "RepoUrl":  "https://github.com/VamprincessDorene/FlipCup",
-        "DownloadLinkInstall":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.0.0/latest.zip",
-        "DownloadLinkUpdate":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.0.0/latest.zip",
-        "DownloadLinkTesting":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.0.0/latest.zip",
-        "LastUpdate":  1793996407
+        "DownloadLinkInstall":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.1.0/latest.zip",
+        "DownloadLinkUpdate":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.1.0/latest.zip",
+        "DownloadLinkTesting":  "https://github.com/VamprincessDorene/FlipCup/releases/download/v0.2.1.0/latest.zip",
+        "LastUpdate":  1793998302
     }
 ]

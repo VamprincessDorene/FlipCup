@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -117,7 +117,7 @@ public sealed class MainWindow : Window
             changed |= Slider("Row separation", cfg.SideOffset, v => cfg.SideOffset = v, 0.05f, 2f);
             changed |= Slider("Cup size", cfg.CupHeight, v => cfg.CupHeight = v, 0.05f, 1f);
             var deg = cfg.AnchorRotation * 180f / MathF.PI;
-            if (ImGui.SliderFloat("Rotate layout", ref deg, -180f, 180f, "%.0f°"))
+            if (ImGui.SliderFloat("Rotate layout", ref deg, -180f, 180f, "%.0fÂ°"))
             {
                 cfg.AnchorRotation = deg * MathF.PI / 180f;
                 changed = true;
@@ -179,35 +179,53 @@ public sealed class MainWindow : Window
 
         if (s.Role == Role.Offline)
         {
-            ImGui.TextWrapped("One person hosts (they set up the table). Everyone else joins with the code. " +
-                              "Everyone needs this plugin, and must be in the same house.");
-            if (ImGui.Button("Host a game"))
+            if (s.Error.Length > 0) ImGui.TextColored(Red, s.Error);
+            ImGui.TextWrapped("Everyone needs this plugin and must be in the same house.");
+            ImGui.Spacing();
+
+            // --- Hosting ---
+            ImGui.Separator();
+            ImGui.TextColored(Gold, "HOST A GAME");
+            ImGui.TextWrapped("Pick this if the cups are on YOUR counter. You set up the table and rules, and get a code to share.");
+            if (ImGui.Button("Host a game", new Vector2(160, 0)))
                 plugin.HostOnline();
+
+            // --- Joining: clearly separate ---
+            ImGui.Spacing();
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.TextColored(Gold, "JOIN A FRIEND'S GAME");
+            ImGui.TextWrapped("Pick this if a friend is hosting. Type the 6-letter code they gave you.");
+            ImGui.SetNextItemWidth(110);
+            ImGui.InputTextWithHint("##code", "CODE", ref joinCode, 8, ImGuiInputTextFlags.CharsUppercase);
             ImGui.SameLine();
-            ImGui.SetNextItemWidth(90);
-            ImGui.InputText("##code", ref joinCode, 8, ImGuiInputTextFlags.CharsUppercase);
-            ImGui.SameLine();
-            if (ImGui.Button("Join") && joinCode.Trim().Length > 0)
+            if (ImGui.Button("Join game") && joinCode.Trim().Length > 0)
                 plugin.JoinOnline(joinCode);
-            if (s.Error.Length > 0) ImGui.TextColored(new Vector4(1, 0.5f, 0.4f, 1), s.Error);
+            ImGui.Separator();
             return;
         }
 
         // Connected (or trying to be).
         var ok = s.Connected && s.Error.Length == 0;
-        ImGui.TextColored(ok ? new Vector4(0.5f, 1, 0.5f, 1) : new Vector4(1, 0.7f, 0.3f, 1),
-            s.Role == Role.Host ? $"Hosting - {s.Status}" : $"Playing in {s.HostName}'s game - {s.Status}");
-        if (s.Error.Length > 0) ImGui.TextColored(new Vector4(1, 0.5f, 0.4f, 1), s.Error);
+        ImGui.TextColored(ok ? Green : Orange,
+            s.Role == Role.Host ? $"You're hosting - {s.Status}" : $"Playing in {s.HostName}'s game - {s.Status}");
+        if (s.Error.Length > 0) ImGui.TextColored(Red, s.Error);
 
         ImGui.Text("Game code:");
         ImGui.SameLine();
-        ImGui.TextColored(new Vector4(1, 0.9f, 0.4f, 1), s.Code);
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Copy join command"))
-            ImGui.SetClipboardText($"/flipcup join {s.Code}");
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Leave"))
-            plugin.LeaveOnline();
+        ImGui.TextColored(Gold, s.Code);
+        if (s.Role == Role.Host)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Copy join command"))
+                ImGui.SetClipboardText($"/flipcup join {s.Code}");
+        }
+        else
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Leave game"))
+                plugin.LeaveOnline();
+        }
 
         // Seat picker: one row per team.
         ImGui.TextDisabled("Pick your seat (click a free one). You can only flip your own cup.");
@@ -228,21 +246,90 @@ public sealed class MainWindow : Window
                 if (ImGui.Button($"{label}##seat{i}", new Vector2(80, 38)) && cup.Owner == null)
                     s.ClaimSeat(i);
                 if (taken) ImGui.EndDisabled();
-
-                // The host can free a seat (someone disconnected or is in the wrong spot).
-                if (s.Role == Role.Host && cup.Owner != null && cup.Owner != s.ClientId
-                    && ImGui.BeginPopupContextItem($"seatmenu{i}"))
-                {
-                    if (ImGui.MenuItem("Free this seat")) lock (game) game.FreeSeat(i);
-                    ImGui.EndPopup();
-                }
             }
         }
         if (mySeat >= 0 && ImGui.SmallButton("Stand up (leave seat)"))
             s.LeaveSeat();
+
         if (s.Role == Role.Host)
-            ImGui.TextDisabled("Right-click a taken seat to free it. Empty seats can be clicked by anyone.");
+            DrawHostControls();
     }
+
+    private string? confirmKickId;
+    private string confirmKickName = "";
+
+    /// <summary>Host only: who's in the game, with Move/Kick, and ending the game.</summary>
+    private void DrawHostControls()
+    {
+        var s = plugin.Session;
+        var game = plugin.Game;
+
+        ImGui.Spacing();
+        ImGui.TextColored(Gold, "PLAYERS");
+        var list = s.Players();
+        ImGui.Text($"  {s.MyName} (you, host)");
+        if (list.Count == 0) ImGui.TextDisabled("  Nobody has joined yet. Share the code!");
+
+        foreach (var p in list)
+        {
+            ImGui.PushID(p.Id);
+            var where = p.Seat < 0 ? "no seat yet"
+                      : $"{game.TeamName(p.Seat / Game.SeatsPerTeam)} seat {p.Seat % Game.SeatsPerTeam + 1}";
+            ImGui.Text($"  {p.Name}");
+            ImGui.SameLine(200);
+            ImGui.TextDisabled(where);
+            ImGui.SameLine(360);
+            if (p.Seat >= 0 && ImGui.SmallButton("Unseat"))
+                lock (game) game.FreeSeat(p.Seat);
+            ImGui.SameLine(420);
+            if (ImGui.SmallButton("Kick"))
+            {
+                confirmKickId = p.Id;
+                confirmKickName = p.Name;
+                ImGui.OpenPopup("confirmkick");
+            }
+            if (ImGui.BeginPopup("confirmkick"))
+            {
+                ImGui.Text($"Kick {confirmKickName} from the game?");
+                ImGui.TextDisabled("They lose their seat and can't rejoin this game.");
+                if (ImGui.Button("Kick them") && confirmKickId != null)
+                {
+                    s.Kick(confirmKickId);
+                    plugin.Announce($"{confirmKickName} was removed from the game.");
+                    ImGui.CloseCurrentPopup();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel")) ImGui.CloseCurrentPopup();
+                ImGui.EndPopup();
+            }
+            ImGui.PopID();
+        }
+        ImGui.TextDisabled("Unseat frees their cup; Kick removes them from the game. Empty seats can be clicked by anyone.");
+
+        ImGui.Spacing();
+        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.6f, 0.15f, 0.15f, 1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.75f, 0.2f, 0.2f, 1));
+        if (ImGui.Button("End game for everyone"))
+            ImGui.OpenPopup("confirmend");
+        ImGui.PopStyleColor(2);
+        if (ImGui.BeginPopup("confirmend"))
+        {
+            ImGui.Text("End the game? Everyone is disconnected.");
+            if (ImGui.Button("End game"))
+            {
+                plugin.LeaveOnline();
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel")) ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+    }
+
+    private static readonly Vector4 Gold = new(1, 0.85f, 0.4f, 1);
+    private static readonly Vector4 Green = new(0.5f, 1, 0.5f, 1);
+    private static readonly Vector4 Orange = new(1, 0.7f, 0.3f, 1);
+    private static readonly Vector4 Red = new(1, 0.5f, 0.4f, 1);
 
     private static string Shorten(string? name) =>
         string.IsNullOrEmpty(name) ? "?" : name.Length > 10 ? name[..10] : name;
