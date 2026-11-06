@@ -242,14 +242,53 @@ public sealed class MainWindow : Window
                           : cup.Owner == s.ClientId ? $"Seat {seat + 1}\nYOU"
                           : $"Seat {seat + 1}\n{Shorten(cup.OwnerName)}";
                 var taken = cup.Owner != null && cup.Owner != s.ClientId;
-                if (taken) ImGui.BeginDisabled();
-                if (ImGui.Button($"{label}##seat{i}", new Vector2(80, 38)) && cup.Owner == null)
-                    s.ClaimSeat(i);
-                if (taken) ImGui.EndDisabled();
+                var hostCanClear = taken && s.Role == Role.Host;   // host: click someone's seat to remove them
+                if (taken && !hostCanClear) ImGui.BeginDisabled();
+                if (ImGui.Button($"{label}##seat{i}", new Vector2(80, 38)))
+                {
+                    if (cup.Owner == null) s.ClaimSeat(i);
+                    else if (hostCanClear) ImGui.OpenPopup($"clearseat{i}");
+                }
+                if (taken && !hostCanClear) ImGui.EndDisabled();
+                if (hostCanClear && ImGui.IsItemHovered())
+                    ImGui.SetTooltip($"Click to remove {cup.OwnerName} from this seat");
+
+                if (ImGui.BeginPopup($"clearseat{i}"))
+                {
+                    ImGui.Text($"Remove {cup.OwnerName} from {game.TeamName(t)} seat {seat + 1}?");
+                    ImGui.TextDisabled("The seat becomes free. If they're still here they can pick a seat again.");
+                    if (ImGui.Button("Remove from seat"))
+                    {
+                        s.RemoveFromSeat(i);
+                        ImGui.CloseCurrentPopup();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Cancel")) ImGui.CloseCurrentPopup();
+                    ImGui.EndPopup();
+                }
             }
         }
         if (mySeat >= 0 && ImGui.SmallButton("Stand up (leave seat)"))
             s.LeaveSeat();
+        if (s.Role == Role.Host)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Clear all seats"))
+                ImGui.OpenPopup("clearall");
+            if (ImGui.BeginPopup("clearall"))
+            {
+                ImGui.Text("Empty every seat (except yours)?");
+                if (ImGui.Button("Clear seats"))
+                {
+                    s.ClearAllSeats();
+                    ImGui.CloseCurrentPopup();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel")) ImGui.CloseCurrentPopup();
+                ImGui.EndPopup();
+            }
+            ImGui.TextDisabled("Host: click a taken seat to remove that person.");
+        }
 
         if (s.Role == Role.Host)
             DrawHostControls();
@@ -277,7 +316,10 @@ public sealed class MainWindow : Window
                       : $"{game.TeamName(p.Seat / Game.SeatsPerTeam)} seat {p.Seat % Game.SeatsPerTeam + 1}";
             ImGui.Text($"  {p.Name}");
             ImGui.SameLine(200);
-            ImGui.TextDisabled(where);
+            if (p.Away) ImGui.TextColored(Orange, "not responding");
+            else ImGui.TextDisabled(where);
+            if (p.Away && ImGui.IsItemHovered())
+                ImGui.SetTooltip("Their game stopped checking in. They'll be removed from their seat automatically after 45 seconds.");
             ImGui.SameLine(360);
             if (p.Seat >= 0 && ImGui.SmallButton("Unseat"))
                 lock (game) game.FreeSeat(p.Seat);

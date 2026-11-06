@@ -38,7 +38,17 @@ public sealed class OnlineSession : IDisposable
     private readonly System.Collections.Generic.Dictionary<string, string> players = new();
     private readonly System.Collections.Generic.HashSet<string> kicked = new();
 
-    public record PlayerInfo(string Id, string Name, int Seat);
+    public record PlayerInfo(string Id, string Name, int Seat, bool Away);
+
+    // Presence: guests check in every few seconds; the host notices when they stop.
+    private const float PingSeconds = 5f;
+    private const float AwayAfterSeconds = 15f;
+    private const float DropAfterSeconds = 45f;
+    private float hostClock;
+    private float sincePing;
+    private float sinceDropCheck;
+    private readonly System.Collections.Generic.Dictionary<string, float> lastSeen = new();
+    private readonly System.Collections.Generic.HashSet<string> pingers = new();
 
     public Role Role { get; private set; } = Role.Offline;
     public string Code { get; private set; } = "";
@@ -118,17 +128,14 @@ public sealed class OnlineSession : IDisposable
             await r.DisconnectAsync();
             r.Dispose();
         }
-        if (Role == Role.Guest)
-        {
-            // Back to a local game: clear the host's seat names.
-            lock (game) foreach (var c in game.Cups) { c.Owner = null; c.OwnerName = null; }
-        }
+        // Back to a local game: nobody is sitting anywhere any more (host and guests alike).
+        lock (game) foreach (var c in game.Cups) { c.Owner = null; c.OwnerName = null; }
         Role = Role.Offline;
         Code = "";
         gotFirstSnapshot = false;
         lastLayoutJson = "";
         leaveRequested = false;
-        lock (players) { players.Clear(); kicked.Clear(); }
+        lock (players) { players.Clear(); kicked.Clear(); lastSeen.Clear(); pingers.Clear(); }
     }
 
     // ----- host controls ----------------------------------------------------------
@@ -137,8 +144,46 @@ public sealed class OnlineSession : IDisposable
     public System.Collections.Generic.List<PlayerInfo> Players()
     {
         lock (players)
-            return players.Select(p => new PlayerInfo(p.Key, p.Value, game.SeatOf(p.Key)))
+            return players.Select(p => new PlayerInfo(p.Key, p.Value, game.SeatOf(p.Key), IsAway(p.Key)))
                           .OrderBy(p => p.Seat < 0 ? 99 : p.Seat).ToList();
+    }
+
+    /// <summary>Host: has this player's plugin stopped checking in? (Caller holds the players lock.)</summary>
+    private bool IsAway(string id) =>
+        pingers.Contains(id) && lastSeen.TryGetValue(id, out var t) && hostClock - t > AwayAfterSeconds;
+
+    /// <summary>Host: take whoever is in this seat out of it (they stay in the game if still connected).</summary>
+    public void RemoveFromSeat(int index)
+    {
+        lock (game) game.FreeSeat(index);
+    }
+
+    /// <summary>Host: empty every seat except your own.</summary>
+    public void ClearAllSeats()
+    {
+        lock (game)
+            for (var i = 0; i < game.Cups.Length; i++)
+                if (game.Cups[i].Owner != null && game.Cups[i].Owner != ClientId)
+                    game.FreeSeat(i);
+    }
+
+    /// <summary>
+    /// Host: drop players whose plugin has gone quiet (game closed, crashed, disconnected)
+    /// so they don't hold a seat forever. Only players on a version that checks in are timed out.
+    /// </summary>
+    private void DropQuietPlayers()
+    {
+        System.Collections.Generic.List<(string Id, string Name)> gone;
+        lock (players)
+            gone = pingers.Where(id => lastSeen.TryGetValue(id, out var t) && hostClock - t > DropAfterSeconds)
+                          .Select(id => (id, players.TryGetValue(id, out var n) ? n : "A player")).ToList();
+        foreach (var (id, name) in gone)
+        {
+            lock (players) { players.Remove(id); lastSeen.Remove(id); pingers.Remove(id); }
+            var hadSeat = game.SeatOf(id) >= 0;
+            game.Release(id);
+            if (hadSeat) announce($"{name} stopped responding and was removed from their seat.");
+        }
     }
 
     /// <summary>
@@ -150,7 +195,13 @@ public sealed class OnlineSession : IDisposable
         if (Role != Role.Host || clientId == ClientId) return;
         lock (game)
         {
-            lock (players) { kicked.Add(clientId); players.Remove(clientId); }
+            lock (players)
+            {
+                kicked.Add(clientId);
+                players.Remove(clientId);
+                lastSeen.Remove(clientId);
+                pingers.Remove(clientId);
+            }
             game.Release(clientId);
             game.Changed = true;
         }
@@ -209,12 +260,25 @@ public sealed class OnlineSession : IDisposable
 
         if (Role == Role.Host)
         {
+            hostClock += dt;
+            sinceDropCheck += dt;
+            if (sinceDropCheck >= 1f)
+            {
+                sinceDropCheck = 0;
+                DropQuietPlayers();
+            }
             sinceBroadcast += dt;
             if (game.Changed || sinceBroadcast >= HeartbeatSeconds) Broadcast();
         }
         else
         {
             sinceHostHeard += dt;
+            sincePing += dt;
+            if (sincePing >= PingSeconds && gotFirstSnapshot)
+            {
+                sincePing = 0;
+                _ = Send(new RequestDto { Type = "ping" });   // "I'm still here"
+            }
         }
 
         // Guest: kicked, or the host ended the game -> go offline (the error stays visible).
@@ -234,8 +298,18 @@ public sealed class OnlineSession : IDisposable
         lock (players)
         {
             if (kicked.Contains(r.From)) return;   // removed by the host: ignore everything
-            if (r.Type == "leave") players.Remove(r.From);
-            else players[r.From] = Clean(r.Name);
+            if (r.Type == "leave")
+            {
+                players.Remove(r.From);
+                lastSeen.Remove(r.From);
+                pingers.Remove(r.From);
+            }
+            else
+            {
+                players[r.From] = Clean(r.Name);
+                lastSeen[r.From] = hostClock;
+                if (r.Type == "ping") pingers.Add(r.From);
+            }
         }
 
         switch (r.Type)
