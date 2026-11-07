@@ -169,6 +169,8 @@ public sealed class MainWindow : Window
     }
 
     private string joinCode = "";
+    private string hostPassword = "";
+    private bool hostPasswordWrong;
 
     private void DrawOnline()
     {
@@ -188,7 +190,36 @@ public sealed class MainWindow : Window
             ImGui.TextColored(Gold, "HOST A GAME");
             ImGui.TextWrapped("Pick this if the cups are on YOUR counter. You set up the table and rules, and get a code to share.");
             if (ImGui.Button("Host a game", new Vector2(160, 0)))
-                plugin.HostOnline();
+            {
+                hostPassword = "";
+                hostPasswordWrong = false;
+                ImGui.OpenPopup("hostpassword");
+            }
+            if (ImGui.BeginPopup("hostpassword"))
+            {
+                ImGui.Text("Enter the host password:");
+                if (ImGui.IsWindowAppearing()) ImGui.SetKeyboardFocusHere();
+                var submit = ImGui.InputText("##hostpw", ref hostPassword, 32,
+                    ImGuiInputTextFlags.Password | ImGuiInputTextFlags.EnterReturnsTrue);
+                if (hostPasswordWrong) ImGui.TextColored(new Vector4(1f, 0.4f, 0.4f, 1), "Wrong password.");
+                if (ImGui.Button("Host") || submit)
+                {
+                    if (Plugin.CheckHostPassword(hostPassword))
+                    {
+                        hostPassword = "";
+                        ImGui.CloseCurrentPopup();
+                        plugin.HostOnline();
+                    }
+                    else
+                    {
+                        hostPasswordWrong = true;
+                        hostPassword = "";
+                    }
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Cancel")) { hostPassword = ""; ImGui.CloseCurrentPopup(); }
+                ImGui.EndPopup();
+            }
 
             // --- Joining: clearly separate ---
             ImGui.Spacing();

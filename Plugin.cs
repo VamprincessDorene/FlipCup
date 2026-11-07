@@ -101,6 +101,19 @@ public sealed class Plugin : IDalamudPlugin
 
     private string CharacterName() => ObjectTable.LocalPlayer?.Name.TextValue ?? "Player";
 
+    // Hosting is locked behind a password. Only a salted, slow hash is stored here (the repo is
+    // public), so the password itself never appears in the source or the DLL.
+    private static readonly byte[] HostSalt = System.Text.Encoding.UTF8.GetBytes("FlipCup-host-v1");
+    private const string HostHash = "B6rb2LivXr2kx1H93i7CpyClGKS/DBqJNJWwFyMjwjI=";
+
+    public static bool CheckHostPassword(string password)
+    {
+        var key = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            password.Trim(), HostSalt, 200000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            key, System.Convert.FromBase64String(HostHash));
+    }
+
     public void HostOnline()
     {
         Session.MyName = CharacterName();
@@ -247,7 +260,8 @@ public sealed class Plugin : IDalamudPlugin
                 WriteDebugDump();
                 break;
             case "host":
-                HostOnline();
+                mainWindow.IsOpen = true;
+                ChatGui.Print("Click \"Host a game\" in the Flip Cup window and enter the host password.", "Flip Cup");
                 break;
             case "join" when parts.Length > 1:
                 JoinOnline(parts[1]);
