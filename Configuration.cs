@@ -25,6 +25,8 @@ public sealed class Configuration : IPluginConfiguration
     public uint FurnitureBaseId { get; set; }           // HousingFurniture row, set when picked from the scan list; 0 = match by name
     public float ModelHeight { get; set; } = 0.2f;     // real height of that model, used as the flip pivot
     public float SearchRadius { get; set; } = 8f;      // how far from the anchor to look for them
+    public bool ReverseSeatOrder { get; set; }         // seat 1 at the other end of the counter
+    public bool SwapTeamSides { get; set; }            // teams switch rows
 
     // Rules.
     public bool RequireChug { get; set; } = true;      // first click = chug, then clicks = flip attempts

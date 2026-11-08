@@ -183,11 +183,20 @@ public sealed unsafe class FurnitureCups : IDisposable
         }
         var theta = 0.5f * MathF.Atan2(2 * sxz, sxx - szz);
         var along = new Vector3(MathF.Cos(theta), 0, MathF.Sin(theta));
-        if (Vector3.Dot(playerPos - mean, along) > 0) along = -along;   // seat 1 = the end nearest you
-        var across = new Vector3(-along.Z, 0, along.X);
+        // Pick the direction from the house itself, not from where the host is standing, so
+        // every host gets the same seat order and team sides for the same counter.
+        // (Reference axis is slightly tilted so a counter on a 0/45/90 degree angle is never a tie.)
+        var reference = Vector3.Normalize(new Vector3(1f, 0f, 0.37f));
+        if (Vector3.Dot(along, reference) < 0) along = -along;
+        var across = new Vector3(-along.Z, 0, along.X);   // decided before reversing, so rows stay put
+        // Flip axis: each row tips the same physical way whatever the options (team 1 tips with
+        // the opposite sign, so swapping sides also turns the axis around).
+        var flipAxis = config.SwapTeamSides ? -along : along;
+        if (config.ReverseSeatOrder) along = -along;
 
         var byRow = matches.OrderBy(o => Vector3.Dot(Pos(o) - mean, across)).ToList();
         var rows = new[] { byRow.Take(4).ToList(), byRow.Skip(4).ToList() };
+        if (config.SwapTeamSides) (rows[0], rows[1]) = (rows[1], rows[0]);
 
         for (var t = 0; t < 2; t++)
         {
@@ -208,7 +217,7 @@ public sealed unsafe class FurnitureCups : IDisposable
 
         // Store the layout as the anchor so the flip axis runs along the counter.
         config.AnchorX = mean.X; config.AnchorY = mean.Y; config.AnchorZ = mean.Z;
-        config.AnchorRotation = MathF.Atan2(along.X, along.Z);
+        config.AnchorRotation = MathF.Atan2(flipAxis.X, flipAxis.Z);
         config.HasAnchor = true;
 
         IsBound = true;

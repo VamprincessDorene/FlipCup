@@ -60,7 +60,7 @@ public sealed class MainWindow : Window
         {
             ImGui.TextWrapped("Place 8 cup furnishings on the counter in two rows of 4 (Tankard works best). " +
                               "Stand next to the counter, scan, click your cup, then 'Use as cups'. " +
-                              "Seat 1 is the end of each row nearest you. " +
+                              "Seat order is fixed by the counter, so it's the same whoever hosts. " +
                               "Flips only move the models on your screen; nothing is saved to the house.");
 
             if (ImGui.Button("Scan nearby furniture"))
@@ -99,6 +99,21 @@ public sealed class MainWindow : Window
                 ImGui.SameLine();
                 if (ImGui.Button("Stop using furniture"))
                     plugin.UnbindFurniture();
+            }
+            if (plugin.Furniture.IsBound)
+            {
+                ImGui.TextDisabled("Seat order is the same no matter who hosts. Wrong way round?");
+                if (ImGui.Button("Reverse seat order"))
+                {
+                    cfg.ReverseSeatOrder = !cfg.ReverseSeatOrder;
+                    plugin.BindFurniture();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Swap team sides"))
+                {
+                    cfg.SwapTeamSides = !cfg.SwapTeamSides;
+                    plugin.BindFurniture();
+                }
             }
             if (plugin.BindStatus.Length > 0)
                 ImGui.TextColored(plugin.Furniture.IsBound ? new Vector4(0.5f, 1, 0.5f, 1) : new Vector4(1, 0.7f, 0.3f, 1), plugin.BindStatus);
