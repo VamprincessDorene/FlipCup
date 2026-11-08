@@ -85,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         lock (Game)
         {
             Session.Pump(dt);
+            Game.AutoReset = Session.Role != Role.Guest;   // guests follow the host's new round
             TryApplyHostLayout(dt);
             Game.Update(dt);
             Furniture.Apply(Game);
@@ -148,9 +149,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             AnchorX = Config.AnchorX, AnchorY = Config.AnchorY, AnchorZ = Config.AnchorZ,
             AnchorRotation = Config.AnchorRotation, HasAnchor = Config.HasAnchor,
-            HeightOffset = Config.HeightOffset, StartDistance = Config.StartDistance,
-            Spacing = Config.Spacing, SideOffset = Config.SideOffset,
-            CupHeight = Config.CupHeight, ModelHeight = Config.ModelHeight,
+            ModelHeight = Config.ModelHeight,
         };
         if (Furniture.IsBound)
         {
@@ -177,14 +176,13 @@ public sealed class Plugin : IDalamudPlugin
         var l = hostLayout;
         Config.AnchorX = l.AnchorX; Config.AnchorY = l.AnchorY; Config.AnchorZ = l.AnchorZ;
         Config.AnchorRotation = l.AnchorRotation; Config.HasAnchor = l.HasAnchor;
-        Config.HeightOffset = l.HeightOffset; Config.StartDistance = l.StartDistance;
-        Config.Spacing = l.Spacing; Config.SideOffset = l.SideOffset;
-        Config.CupHeight = l.CupHeight; Config.ModelHeight = l.ModelHeight;
+        Config.ModelHeight = l.ModelHeight;
         Overlay.Visible = true;
 
         if (l.FurnitureBaseId == 0 || l.CupPositions is not { Length: 24 })
         {
-            if (Furniture.IsBound) Furniture.Unbind();   // host uses drawn cups
+            if (Furniture.IsBound) Furniture.Unbind();   // host hasn't picked cups yet
+            BindStatus = "Waiting for the host to set up the cups.";
             hostLayoutApplied = true;
             return;
         }
@@ -253,9 +251,6 @@ public sealed class Plugin : IDalamudPlugin
         var sub = parts.Length > 0 ? parts[0].ToLowerInvariant() : "";
         switch (sub)
         {
-            case "here":
-                SetAnchorToPlayer();
-                break;
             case "debug":
                 WriteDebugDump();
                 break;
@@ -291,28 +286,6 @@ public sealed class Plugin : IDalamudPlugin
         }
         lock (Game) Game.Reset();
         ChatGui.Print("New round! Cups are full.", "Flip Cup");
-    }
-
-    public void SetAnchorToPlayer()
-    {
-        var player = ObjectTable.LocalPlayer;
-        if (player == null) return;
-        if (Session.Role == Role.Guest)
-        {
-            ChatGui.Print("You're in someone else's game; the host sets up the table.", "Flip Cup");
-            return;
-        }
-
-        Config.AnchorX = player.Position.X;
-        Config.AnchorY = player.Position.Y;
-        Config.AnchorZ = player.Position.Z;
-        Config.AnchorRotation = player.Rotation;
-        Config.HasAnchor = true;
-        Overlay.Visible = true;
-        if (Furniture.IsBound) UnbindFurniture();  // seat assignment depends on where you stand
-        SaveConfig();
-        Game.Reset();
-        ChatGui.Print("Cups placed in front of you. Adjust height/spacing in /flipcup if they're off the counter.", "Flip Cup");
     }
 
     public void SaveConfig() => PluginInterface.SavePluginConfig(Config);

@@ -6,19 +6,13 @@ public sealed class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
 
-    // Table anchor: where the player stood (feet position) and which way they faced.
+    // Table centre and direction, worked out from the 8 cups when they're picked.
+    // AnchorRotation is the axis the cups flip around (along the counter).
     public bool HasAnchor { get; set; }
     public float AnchorX { get; set; }
     public float AnchorY { get; set; }
     public float AnchorZ { get; set; }
     public float AnchorRotation { get; set; }
-
-    // Layout, in yalms, relative to the anchor.
-    public float HeightOffset { get; set; } = 0.95f;   // counter height above your feet
-    public float StartDistance { get; set; } = 0.6f;   // distance from anchor to the first pair of cups
-    public float Spacing { get; set; } = 0.45f;        // distance between cups along the counter
-    public float SideOffset { get; set; } = 0.35f;     // distance from the counter's centre line to each team's row
-    public float CupHeight { get; set; } = 0.22f;      // visual size of the cup
 
     // Real furniture cups: the name of the placed furnishing to use as cups (e.g. "Tankard").
     public string FurnitureName { get; set; } = "Tankard";

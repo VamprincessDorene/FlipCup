@@ -21,17 +21,12 @@ public sealed class CupDto
 
 public sealed class LayoutDto
 {
-    // Anchor + slider values, used for drawn cups.
+    // Table centre, flip axis and model height, so everyone animates the cups the same way.
     public float AnchorX { get; set; }
     public float AnchorY { get; set; }
     public float AnchorZ { get; set; }
     public float AnchorRotation { get; set; }
     public bool HasAnchor { get; set; }
-    public float HeightOffset { get; set; }
-    public float StartDistance { get; set; }
-    public float Spacing { get; set; }
-    public float SideOffset { get; set; }
-    public float CupHeight { get; set; }
     public float ModelHeight { get; set; }
 
     // Real furniture cups: which item, and where each seat's cup is (8 x XYZ), so every

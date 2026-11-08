@@ -67,6 +67,18 @@ public sealed class Game
     /// <summary>Set whenever something other players need to see changes (the host broadcasts then).</summary>
     public bool Changed { get; set; }
 
+    /// <summary>Seconds the winner banner stays up before the cups refill on their own.</summary>
+    public const float WinPause = 6f;
+
+    /// <summary>
+    /// True when this copy starts the next round itself (offline or host). Guests leave it off
+    /// and follow the host's new round.
+    /// </summary>
+    public bool AutoReset { get; set; } = true;
+
+    /// <summary>Seconds until the next round starts after a win (0 when nobody has won).</summary>
+    public float NextRoundIn { get; private set; }
+
     public Game(Configuration config, Action<string> announce)
     {
         this.config = config;
@@ -95,6 +107,14 @@ public sealed class Game
             c.Attempts = 0;
         }
         Winner = -1;
+        NextRoundIn = 0;
+    }
+
+    /// <summary>Back to a blank table with nobody seated (used after leaving an online game).</summary>
+    public void Clear()
+    {
+        foreach (var c in Cups) { c.Owner = null; c.OwnerName = null; }
+        Reset();
     }
 
     public string TeamName(int team) =>
@@ -219,6 +239,7 @@ public sealed class Game
         if (Winner < 0 && s.Winner >= 0 && Cups.All(c => c.State is not (CupState.Flipping or CupState.OnSide)))
         {
             Winner = s.Winner;
+            NextRoundIn = WinPause;   // for the countdown display; the host does the actual reset
             if (!firstSnapshot) announce($"{TeamName(Winner)} WINS!");
         }
     }
@@ -262,6 +283,17 @@ public sealed class Game
 
     public void Update(float dt)
     {
+        if (Winner >= 0 && NextRoundIn > 0)
+        {
+            NextRoundIn = MathF.Max(0, NextRoundIn - dt);
+            if (NextRoundIn <= 0 && AutoReset)
+            {
+                Reset();
+                announce("New round! Cups are full.");
+                return;
+            }
+        }
+
         foreach (var c in Cups)
         {
             if (c.ChugTimer > 0) c.ChugTimer = MathF.Max(0, c.ChugTimer - dt);
@@ -305,6 +337,7 @@ public sealed class Game
         if (Winner < 0 && Cups.Where(x => x.Team == c.Team).All(x => x.State == CupState.Down))
         {
             Winner = c.Team;
+            NextRoundIn = WinPause;
             Changed = true;
             announce($"{TeamName(c.Team)} WINS!");
         }

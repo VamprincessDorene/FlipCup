@@ -128,9 +128,12 @@ public sealed class OnlineSession : IDisposable
             await r.DisconnectAsync();
             r.Dispose();
         }
-        // Back to a local game: nobody is sitting anywhere any more (host and guests alike).
-        lock (game) foreach (var c in game.Cups) { c.Owner = null; c.OwnerName = null; }
-        Role = Role.Offline;
+        // Back to a local game: empty seats, full cups, no winner banner (host and guests alike).
+        lock (game)
+        {
+            Role = Role.Offline;   // inside the lock so no late snapshot is applied after the clear
+            game.Clear();
+        }
         Code = "";
         gotFirstSnapshot = false;
         lastLayoutJson = "";

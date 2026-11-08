@@ -36,27 +36,22 @@ public sealed class MainWindow : Window
             if (ImGui.Button(plugin.Overlay.Visible ? "Hide cups" : "Show cups"))
                 plugin.Overlay.Visible = !plugin.Overlay.Visible;
             if (game.Winner >= 0)
-                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1), $"{game.TeamName(game.Winner)} won! Waiting for the host to start a new round.");
+                ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1), $"{game.TeamName(game.Winner)} won! Next round starting...");
             return;
         }
 
         // ---- Setup ----
-        ImGui.TextWrapped("Drawn cups: stand at one END of the counter facing along it, click 'Place cups here', then use the Position sliders. " +
-                          "Real cups: see below.");
-        if (ImGui.Button("Place cups here"))
-            plugin.SetAnchorToPlayer();
-        ImGui.SameLine();
-        if (ImGui.Button(plugin.Overlay.Visible ? "Hide cups" : "Show cups"))
+        if (ImGui.Button(plugin.Overlay.Visible ? "Hide cup labels" : "Show cup labels"))
             plugin.Overlay.Visible = !plugin.Overlay.Visible;
         ImGui.SameLine();
         if (ImGui.Button("New round"))
             plugin.NewRound();
 
-        if (!cfg.HasAnchor)
-            ImGui.TextColored(new Vector4(1, 0.7f, 0.3f, 1), "No cups placed yet.");
+        if (!plugin.Furniture.IsBound)
+            ImGui.TextColored(new Vector4(1, 0.7f, 0.3f, 1), "No cups yet: pick your 8 cup furnishings below.");
 
         // ---- Real in-game cups ----
-        if (ImGui.CollapsingHeader("Use real cups (furniture)", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Cups (furniture)", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextWrapped("Place 8 cup furnishings on the counter in two rows of 4 (Tankard works best). " +
                               "Stand next to the counter, scan, click your cup, then 'Use as cups'. " +
@@ -123,22 +118,6 @@ public sealed class MainWindow : Window
             changed |= Slider("Search radius", cfg.SearchRadius, v => cfg.SearchRadius = v, 2f, 20f);
         }
 
-        if (ImGui.CollapsingHeader(plugin.Furniture.IsBound ? "Position (drawn cups only)" : "Position",
-                                   plugin.Furniture.IsBound ? ImGuiTreeNodeFlags.None : ImGuiTreeNodeFlags.DefaultOpen))
-        {
-            changed |= Slider("Counter height", cfg.HeightOffset, v => cfg.HeightOffset = v, -1f, 3f);
-            changed |= Slider("Distance to first cups", cfg.StartDistance, v => cfg.StartDistance = v, 0f, 5f);
-            changed |= Slider("Cup spacing", cfg.Spacing, v => cfg.Spacing = v, 0.1f, 2f);
-            changed |= Slider("Row separation", cfg.SideOffset, v => cfg.SideOffset = v, 0.05f, 2f);
-            changed |= Slider("Cup size", cfg.CupHeight, v => cfg.CupHeight = v, 0.05f, 1f);
-            var deg = cfg.AnchorRotation * 180f / MathF.PI;
-            if (ImGui.SliderFloat("Rotate layout", ref deg, -180f, 180f, "%.0fÂ°"))
-            {
-                cfg.AnchorRotation = deg * MathF.PI / 180f;
-                changed = true;
-            }
-        }
-
         // ---- Rules ----
         if (ImGui.CollapsingHeader("Rules"))
         {
@@ -177,7 +156,7 @@ public sealed class MainWindow : Window
         }
 
         if (game.Winner >= 0)
-            ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1), $"{game.TeamName(game.Winner)} won! Press 'New game' to play again.");
+            ImGui.TextColored(new Vector4(0.4f, 1f, 0.4f, 1), $"{game.TeamName(game.Winner)} won! Next round in {MathF.Ceiling(game.NextRoundIn):F0}...");
 
         if (changed)
             plugin.SaveConfig();
